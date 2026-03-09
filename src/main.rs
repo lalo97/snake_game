@@ -11,8 +11,10 @@ use piston_window::{graphics::clear, *};
 use draw::to_coord;
 use game::Game;
 
+/// Background color of the game window.
 const BACK_COLOR: Color = [0.5, 0.5, 0.5, 1.0];
 
+/// Entry point: creates the window, game, and runs the event loop.
 fn main() {
     let (width, height) = (30, 30);
 

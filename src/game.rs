@@ -14,12 +14,11 @@ const GAMEOVER_COLOR: Color = [0.90, 0.00, 0.00, 0.5];
 const MOVING_PERIOD: f64 = 0.1;
 const RESTART_TIME: f64 = 1.0;
 
+/// Top-level game state: snake, food, board size, and timing.
 pub struct Game {
     snake: Snake,
 
-    food_exists: bool,
-    food_x: i32,
-    food_y: i32,
+    food: Option<(i32, i32)>,
 
     width: i32,
     height: i32,
@@ -29,19 +28,19 @@ pub struct Game {
 }
 
 impl Game {
+    /// Initializes a new game with a fresh snake and food at a fixed starting position.
     pub fn new(width: i32, height: i32) -> Game {
         Game {
             snake: Snake::new(2, 2),
             waiting_time: 0.0,
-            food_exists: true,
-            food_x: 6,
-            food_y: 4,
+            food: Some((6, 4)),
             width,
             height,
             game_over: false,
         }
     }
 
+    /// Handles a keyboard event; updates the snake's direction if the key is an arrow key.
     pub fn key_pressed(&mut self, key: Key) {
         if self.game_over {
             return;
@@ -52,23 +51,22 @@ impl Game {
             Key::Down => Some(Direction::Down),
             Key::Left => Some(Direction::Left),
             Key::Right => Some(Direction::Right),
-            _ => Some(self.snake.head_direction()),
+            _ => None,
         };
 
         if let Some(dir) = dir {
-            if dir == self.snake.head_direction().opposite() {
-                return;
+            if dir != self.snake.head_direction().opposite() {
+                self.update_snake(Some(dir));
             }
         }
-
-        self.update_snake(dir);
     }
 
+    /// Renders the snake, food, border, and game-over overlay.
     pub fn draw<G: Graphics>(&self, con: &Context, g: &mut G) {
         self.snake.draw(con, g);
 
-        if self.food_exists {
-            draw_block(FOOD_COLOR, self.food_x, self.food_y, con, g);
+        if let Some((food_x, food_y)) = self.food {
+            draw_block(FOOD_COLOR, food_x, food_y, con, g);
         }
 
         draw_rectangle(BORDER_COLOR, 0, 0, self.width, 1, con, g);
@@ -81,6 +79,7 @@ impl Game {
         }
     }
 
+    /// Advances game state by one frame; drives movement timing and restart logic.
     pub fn update(&mut self, delta_time: f64) {
         self.waiting_time += delta_time;
 
@@ -91,7 +90,7 @@ impl Game {
             return;
         }
 
-        if !self.food_exists {
+        if self.food.is_none() {
             self.add_food();
         }
 
@@ -100,38 +99,38 @@ impl Game {
         }
     }
 
+    /// Checks if the snake's head is on the food; if so, grows the snake and removes the food.
     fn check_eating(&mut self) {
-        let (head_x, head_y): (i32, i32) = self.snake.head_position();
-        if self.food_exists && self.food_x == head_x && self.food_y == head_y {
-            self.food_exists = false;
+        let (head_x, head_y) = self.snake.head_position();
+        if self.food == Some((head_x, head_y)) {
+            self.food = None;
             self.snake.restore_tail();
         }
     }
 
+    /// Returns `true` if moving in `dir` would keep the snake within bounds and collision-free.
     fn check_if_snake_alive(&self, dir: Option<Direction>) -> bool {
         let (next_x, next_y) = self.snake.next_head(dir);
-
-        if self.snake.overlap_tail(next_x, next_y) {
-            return false;
-        }
-
-        next_x > 0 && next_y > 0 && next_x < self.width - 1 && next_y < self.height - 1
+        !self.snake.overlap_tail(next_x, next_y)
+            && next_x > 0
+            && next_y > 0
+            && next_x < self.width - 1
+            && next_y < self.height - 1
     }
 
+    /// Randomly places food on an unoccupied cell.
     fn add_food(&mut self) {
-        let mut new_x = random_range(1..self.width - 1);
-        let mut new_y = random_range(1..self.height - 1);
-
-        while self.snake.overlap_tail(new_x, new_y) {
-            new_x = random_range(1..self.width - 1);
-            new_y = random_range(1..self.height - 1);
-        }
-
-        self.food_x = new_x;
-        self.food_y = new_y;
-        self.food_exists = true;
+        let (new_x, new_y) = loop {
+            let x = random_range(1..self.width - 1);
+            let y = random_range(1..self.height - 1);
+            if !self.snake.overlap_tail(x, y) {
+                break (x, y);
+            }
+        };
+        self.food = Some((new_x, new_y));
     }
 
+    /// Moves the snake (or sets game_over) and resets the frame timer.
     fn update_snake(&mut self, dir: Option<Direction>) {
         if self.check_if_snake_alive(dir) {
             self.snake.move_forward(dir);
@@ -142,12 +141,8 @@ impl Game {
         self.waiting_time = 0.0;
     }
 
+    /// Resets the entire game to its initial state.
     fn restart(&mut self) {
-        self.snake = Snake::new(2, 2);
-        self.waiting_time = 0.0;
-        self.food_exists = true;
-        self.food_x = 6;
-        self.food_y = 4;
-        self.game_over = false;
+        *self = Game::new(self.width, self.height);
     }
 }
